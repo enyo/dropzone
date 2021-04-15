@@ -926,8 +926,10 @@ export default class Dropzone extends Emitter {
     fileReader.onload = () => {
       file.dataURL = fileReader.result;
 
-      // Don't bother creating a thumbnail for SVG images since they're vector
-      if (file.type === "image/svg+xml") {
+      // Not all images are created equal.
+      // Some doesn't need a thumbnail (Vecor based), others have poor adoption and cannot be handled by the browser (TIFF)
+      // In any case we skip creating a thumbnail
+      if (file.type === "image/svg+xml" || file.type === "image/tiff") {
         if (callback != null) {
           callback(fileReader.result);
         }
