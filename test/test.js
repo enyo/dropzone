@@ -1375,22 +1375,22 @@ describe("Dropzone", function () {
         it("should properly emit a totaluploadprogress event", function (done) {
           dropzone.files = [
             {
-              size: 1990,
+              size: 2000,
               accepted: true,
               status: Dropzone.UPLOADING,
               upload: {
                 progress: 20,
-                total: 2000, // The bytes to upload are higher than the file size
+                total: 2010, // The bytes to upload are higher than the file size
                 bytesSent: 400,
               },
             },
             {
-              size: 1990,
+              size: 2000,
               accepted: true,
               status: Dropzone.UPLOADING,
               upload: {
                 progress: 10,
-                total: 2000, // The bytes to upload are higher than the file size
+                total: 2010, // The bytes to upload are higher than the file size
                 bytesSent: 200,
               },
             },
@@ -1399,7 +1399,15 @@ describe("Dropzone", function () {
           let _called = 0;
 
           dropzone.on("totaluploadprogress", function (progress) {
-            progress.should.equal(totalProgressExpectation);
+            if (_called <= 3)
+            {
+              progress.should.equal(totalProgressExpectation);
+            }
+            else {
+              // Value is reset to 0 when the dropzone is destroyed
+              progress.should.equal(0);
+            }
+
             if (++_called === 3) {
               return done();
             }
@@ -1408,16 +1416,16 @@ describe("Dropzone", function () {
           var totalProgressExpectation = 15;
           dropzone.emit("uploadprogress", {});
 
-          totalProgressExpectation = 97.5;
-          dropzone.files[0].upload.bytesSent = 2000;
-          dropzone.files[1].upload.bytesSent = 1900;
+          totalProgressExpectation = 98;
+          dropzone.files[0].upload.bytesSent = 2010;
+          dropzone.files[1].upload.bytesSent = 1910;
           // It shouldn't matter that progress is not properly updated since the total size
           // should be calculated from the bytes
           dropzone.emit("uploadprogress", {});
 
           totalProgressExpectation = 100;
-          dropzone.files[0].upload.bytesSent = 2000;
-          dropzone.files[1].upload.bytesSent = 2000;
+          dropzone.files[0].upload.bytesSent = 2010;
+          dropzone.files[1].upload.bytesSent = 2010;
           // It shouldn't matter that progress is not properly updated since the total size
           // should be calculated from the bytes
           dropzone.emit("uploadprogress", {});

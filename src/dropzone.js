@@ -425,20 +425,24 @@ export default class Dropzone extends Emitter {
   }
 
   updateTotalUploadProgress() {
-    let totalUploadProgress;
+    let totalUploadProgress = 0;
     let totalBytesSent = 0;
     let totalBytes = 0;
 
-    let activeFiles = this.getActiveFiles();
+    let allFiles = this.files;
 
-    if (activeFiles.length) {
-      for (let file of this.getActiveFiles()) {
+    if (allFiles.length) {
+      for (let file of allFiles) {
         totalBytesSent += file.upload.bytesSent;
-        totalBytes += file.upload.total;
+        totalBytes += file.size;
       }
-      totalUploadProgress = (100 * totalBytesSent) / totalBytes;
-    } else {
-      totalUploadProgress = 100;
+
+      var progress = (100 * totalBytesSent) / totalBytes;
+
+      // file.upload.bytesSent can be bigger than file.size as it can be populated from the onprogress xhr event, which includes headers. 
+      // That means that progress can be higher than 100. Let's keep it to 100 :)
+
+      totalUploadProgress = progress > 100 ? 100 : progress;
     }
 
     return this.emit(
