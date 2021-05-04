@@ -1287,8 +1287,12 @@ export default class Dropzone extends Emitter {
 
           // Clear the data from the chunk
           chunk.dataBlock = null;
-          // Leaving this reference to xhr intact here will cause memory leaks in some browsers
-          chunk.xhr = null;
+          chunk.response = chunk.xhr.responseText;
+          chunk.responseHeaders = chunk.xhr.getAllResponseHeaders();
+          if (this.options.resetChunkRequest) {
+            // Leaving this reference to xhr intact here will cause memory leaks in some browsers
+            chunk.xhr = null;
+          }
 
           for (let i = 0; i < file.upload.totalChunkCount; i++) {
             if (file.upload.chunks[i] === undefined) {
@@ -1354,8 +1358,8 @@ export default class Dropzone extends Emitter {
       files[0].upload.chunks[dataBlocks[0].chunkIndex].xhr = xhr;
     }
 
-    let method = this.resolveOption(this.options.method, files);
-    let url = this.resolveOption(this.options.url, files);
+    let method = this.resolveOption(this.options.method, files, dataBlocks);
+    let url = this.resolveOption(this.options.url, files, dataBlocks);
     xhr.open(method, url, true);
 
     // Setting the timeout after open because of IE11 issue: https://gitlab.com/meno/dropzone/issues/8
@@ -1386,11 +1390,11 @@ export default class Dropzone extends Emitter {
     progressObj.onprogress = (e) =>
       this._updateFilesUploadProgress(files, xhr, e);
 
-    let headers = {
+    let headers = this.options.defaultHeaders ? {
       Accept: "application/json",
       "Cache-Control": "no-cache",
       "X-Requested-With": "XMLHttpRequest",
-    };
+    } : {};
 
     if (this.options.headers) {
       Dropzone.extend(headers, this.options.headers);
@@ -1654,7 +1658,16 @@ export default class Dropzone extends Emitter {
       );
       return;
     }
-    xhr.send(formData);
+    if (this.options.binaryBody) {
+      if (files[0].upload.chunked) {
+        const chunk = this._getChunk(files[0], xhr);
+        xhr.send(chunk.dataBlock.data);
+      } else {
+        xhr.send(files[0]);
+      }
+    } else {
+      xhr.send(formData);
+    }
   }
 
   // Called internally when processing is finished.

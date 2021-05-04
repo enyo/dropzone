@@ -172,6 +172,14 @@ let defaultOptions = {
   headers: null,
 
   /**
+   * Should the default headers be set or not?
+   * Accept: application/json <- for requesting json response
+   * Cache-Control: no-cache <- Request shouldnt be cached
+   * X-Requested-With: XMLHttpRequest <- We sent the request via XMLHttpRequest
+   */
+  defaultHeaders: true,
+
+  /**
    * If `true`, the dropzone element itself will be clickable, if `false`
    * nothing will be clickable.
    *
@@ -406,6 +414,19 @@ let defaultOptions = {
   chunksUploaded: function (file, done) {
     done();
   },
+
+  /**
+   * Sends the file as binary blob in body?
+   * Needed for AWS Multipart Upload
+   */
+  binaryBody: false,
+
+  /**
+   * Leaving chunk.xhr reference to xhr intact will cause memory leaks in some browsers
+   * That's why its default true, but when you want to use the xhr response of chunk set it to false
+   * In AWS S3 Multipart Upload we need the Response ETag header
+   */
+  resetChunkRequest: true,
 
   /**
    * Gets called when the browser is not supported.
