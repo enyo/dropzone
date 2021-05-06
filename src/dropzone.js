@@ -246,6 +246,7 @@ export default class Dropzone extends Emitter {
           this.hiddenFileInput.setAttribute("multiple", "multiple");
         }
         this.hiddenFileInput.className = "dz-hidden-input";
+        this.hiddenFileInput.ariaLabel = "dropzone hidden input";
 
         if (this.options.acceptedFiles !== null) {
           this.hiddenFileInput.setAttribute(
