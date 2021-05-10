@@ -1041,8 +1041,8 @@ describe("Dropzone", function () {
       {
         dropzone.options.maxFilesizeBase = 1000 * 1000;
         dropzone.options.dictFileTooBig = "File is too big ({{filesize}} MB). Max: {{maxFilesize}} MB.";
-        dropzone.accept({ size: 4.5 * 1000 * 1000, type: "audio/mp3" }, (err) =>
-          err.should.eql("File is too big (4.5 MB). Max: 4 MB.")
+        dropzone.accept({ size: 12345678, type: "audio/mp3" }, (err) =>
+          err.should.eql("File is too big (12.35 MB). Max: 4 MB.")
         );
       });
 
