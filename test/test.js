@@ -1037,6 +1037,15 @@ describe("Dropzone", function () {
           err.should.eql("File is too big (10MiB). Max filesize: 4MiB.")
         ));
 
+      it("shouldn't pass if the filesize is too big with maxFilesizeBase", () =>
+      {
+        dropzone.options.maxFilesizeBase = 1000 * 1000;
+        dropzone.options.dictFileTooBig = "File is too big ({{filesize}} MB). Max: {{maxFilesize}} MB.";
+        dropzone.accept({ size: 4.5 * 1000 * 1000, type: "audio/mp3" }, (err) =>
+          err.should.eql("File is too big (4.5 MB). Max: 4 MB.")
+        );
+      });
+
       it("should properly accept files which mime types are listed in acceptedFiles", function () {
         dropzone.accept(
           { type: "audio/mp3" },

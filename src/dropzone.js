@@ -742,13 +742,14 @@ export default class Dropzone extends Emitter {
   // This function checks the filesize, and if the file.type passes the
   // `acceptedFiles` check.
   accept(file, done) {
+    const base = this.options.maxFilesizeBase || 1024 * 1024;
     if (
       this.options.maxFilesize &&
-      file.size > this.options.maxFilesize * 1024 * 1024
+      file.size > this.options.maxFilesize * base
     ) {
       done(
         this.options.dictFileTooBig
-          .replace("{{filesize}}", Math.round(file.size / 1024 / 10.24) / 100)
+          .replace("{{filesize}}", Math.round(file.size * 100 / base) / 100)
           .replace("{{maxFilesize}}", this.options.maxFilesize)
       );
     } else if (!Dropzone.isValidFile(file, this.options.acceptedFiles)) {
