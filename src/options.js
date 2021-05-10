@@ -78,9 +78,14 @@ let defaultOptions = {
   retryChunksLimit: 3,
 
   /**
-   * The maximum filesize (in bytes) that is allowed to be uploaded.
+   * The maximum filesize that is allowed to be uploaded, as multiple of maxFilesizeBase (default: 256 MiB).
    */
   maxFilesize: 256,
+
+  /**
+   * The base multiplier to use for maximum filesize calculation (default: 1 MiB).
+   */
+  maxFilesizeBase: 1024 * 1024,
 
   /**
    * The name of the file param that gets transferred.
