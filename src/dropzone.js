@@ -1256,7 +1256,7 @@ export default class Dropzone extends Emitter {
 
           let start = chunkIndex * this.options.chunkSize;
           let end = Math.min(
-            start + this.options.chunkSize,
+            start + parseInt(this.options.chunkSize),
             transformedFile.size
           );
 
