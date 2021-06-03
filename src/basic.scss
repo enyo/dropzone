@@ -1,3 +1,5 @@
+@use "sass:math";
+
 .dropzone, .dropzone * {
   box-sizing: border-box;
 }
@@ -46,7 +48,7 @@
       width: 54px;
       height: 58px;
       left: 50%;
-      margin-left: -(54px/2);
+      margin-left: -(math.div(54px, 2));
     }
 
 

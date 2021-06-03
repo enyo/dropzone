@@ -60,7 +60,7 @@
     "mocha-headless-chrome": "^3.0.0",
     "rollup": "^2.38.4",
     "rollup-plugin-html": "^0.2.1",
-    "sass": "^1.0.0",
+    "sass": "^1.33.0",
     "sass-loader": "^11.0.1",
     "sinon": "^9.2.4",
     "sinon-chai": "^3.5.0",
