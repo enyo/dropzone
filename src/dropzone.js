@@ -633,13 +633,17 @@ export default class Dropzone extends Emitter {
       let { items } = e.dataTransfer;
       if (items && items.length && items[0].webkitGetAsEntry != null) {
         // The browser supports dropping of folders, so handle items instead of files
-        this._addFilesFromItems(items);
+        this._addFilesFromItems(items)
+          .then((filesFromItems) => {
+            this.emit("addedfiles", filesFromItems);
+          });
       } else {
         this.handleFiles(files);
+        this.emit("addedfiles", files);
       }
+    } else {
+      this.emit("addedfiles", files);
     }
-
-    this.emit("addedfiles", files);
   }
 
   paste(e) {
@@ -667,7 +671,9 @@ export default class Dropzone extends Emitter {
   // instead of files.
   _addFilesFromItems(items) {
     return (() => {
-      let result = [];
+      let files = [];
+      const deferredFilesFromDirectories = [];
+
       for (let item of items) {
         var entry;
         if (
@@ -675,64 +681,109 @@ export default class Dropzone extends Emitter {
           (entry = item.webkitGetAsEntry())
         ) {
           if (entry.isFile) {
-            result.push(this.addFile(item.getAsFile()));
+            this.addFile(item.getAsFile());
+            files.push(item.getAsFile());
           } else if (entry.isDirectory) {
             // Append all files from that directory to files
-            result.push(this._addFilesFromDirectory(entry, entry.name));
-          } else {
-            result.push(undefined);
+            deferredFilesFromDirectories.push(this._addFilesFromDirectory(entry, entry.name));
           }
         } else if (item.getAsFile != null) {
           if (item.kind == null || item.kind === "file") {
-            result.push(this.addFile(item.getAsFile()));
-          } else {
-            result.push(undefined);
+            this.addFile(item.getAsFile());
+            files.push(item.getAsFile());
           }
-        } else {
-          result.push(undefined);
         }
       }
-      return result;
+
+      return Promise.all(deferredFilesFromDirectories)
+        .then((filesFromDirectories) => {
+          for (const filesFromDirectory of filesFromDirectories) {
+            files = files.concat(filesFromDirectory);
+          }
+
+          return files;
+        });
     })();
   }
 
   // Goes through the directory, and adds each file it finds recursively
   _addFilesFromDirectory(directory, path) {
     let dirReader = directory.createReader();
+    const filesFromDirectoriesDeferred = [];
 
     let errorHandler = (error) =>
       __guardMethod__(console, "log", (o) => o.log(error));
 
     var readEntries = () => {
-      return dirReader.readEntries((entries) => {
-        if (entries.length > 0) {
-          for (let entry of entries) {
-            if (entry.isFile) {
-              entry.file((file) => {
-                if (
-                  this.options.ignoreHiddenFiles &&
-                  file.name.substring(0, 1) === "."
-                ) {
-                  return;
-                }
-                file.fullPath = `${path}/${file.name}`;
-                return this.addFile(file);
-              });
-            } else if (entry.isDirectory) {
-              this._addFilesFromDirectory(entry, `${path}/${entry.name}`);
-            }
-          }
+      filesFromDirectoriesDeferred.push(
+        new Promise((resolveFilesFromDirectory) => {
+          dirReader.readEntries((entries) => {
+            const filesFromSubdirectoriesDeferred = [];
+            let filesByEntriesDeferred = [];
 
-          // Recursively call readEntries() again, since browser only handle
-          // the first 100 entries.
-          // See: https://developer.mozilla.org/en-US/docs/Web/API/DirectoryReader#readEntries
-          readEntries();
-        }
-        return null;
-      }, errorHandler);
+            if (entries.length > 0) {
+              for (let entry of entries) {
+                if (entry.isFile) {
+                  filesByEntriesDeferred.push(
+                    new Promise((resolveFileByEntry) => {
+                      entry.file((file) => {
+                        if (
+                          this.options.ignoreHiddenFiles &&
+                          file.name.substring(0, 1) === "."
+                        ) {
+                          resolveFileByEntry();
+                        }
+                        file.relativePath = `${path}/${file.name}`;
+                        this.addFile(file);
+                        resolveFileByEntry(file);
+                      });
+                    })
+                  );
+                } else if (entry.isDirectory) {
+                  filesFromSubdirectoriesDeferred.push(
+                    this._addFilesFromDirectory(entry, `${path}/${entry.name}`)
+                  );
+                }
+              }
+
+              // Recursively call readEntries() again, since browser only handle
+              // the first 100 entries.
+              // See: https://developer.mozilla.org/en-US/docs/Web/API/DirectoryReader#readEntries
+              readEntries();
+            }
+
+            Promise.all(filesFromSubdirectoriesDeferred)
+              .then((filesFromSubdirectories) => {
+                let filesFromAllSubdirectories = [];
+                for (const filesFromDirectory of filesFromSubdirectories) {
+                  filesFromAllSubdirectories = filesFromAllSubdirectories.concat(filesFromDirectory);
+                }
+
+                Promise.all(filesByEntriesDeferred)
+                  .then((filesByEntries) => {
+                    return filesByEntries.filter((file) => !!file);
+                  })
+                  .then((filesByEntries) => {
+                    resolveFilesFromDirectory(filesByEntries.concat(filesFromAllSubdirectories));
+                  });
+              })
+
+          }, errorHandler);
+        })
+      );
     };
 
-    return readEntries();
+    readEntries();
+
+    return Promise.all(filesFromDirectoriesDeferred)
+      .then((filesFromDirectories) => {
+        let filesFromAllDirectories = [];
+        for (const filesFromDirectory of filesFromDirectories) {
+          filesFromAllDirectories = filesFromAllDirectories.concat(filesFromDirectory);
+        }
+
+        return filesFromAllDirectories;
+      });
   }
 
   // If `done()` is called without argument the file is accepted
@@ -1642,7 +1693,7 @@ export default class Dropzone extends Emitter {
     this._errorProcessing(
       files,
       response ||
-        this.options.dictResponseError.replace("{{statusCode}}", xhr.status),
+      this.options.dictResponseError.replace("{{statusCode}}", xhr.status),
       xhr
     );
   }
