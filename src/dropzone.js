@@ -912,15 +912,16 @@ export default class Dropzone extends Emitter {
             resizeMimeType === "image/jpg"
           ) {
             // Now add the original EXIF information
-            resizedDataURL = ExifRestore.restore(file.dataURL, resizedDataURL);
+            resizedDataURL = restoreExif(file.dataURL, resizedDataURL);
           }
           return callback(Dropzone.dataURItoBlob(resizedDataURL));
         }
-      }
+      },
+      true
     );
   }
 
-  createThumbnail(file, width, height, resizeMethod, fixOrientation, callback) {
+  createThumbnail(file, width, height, resizeMethod, fixOrientation, callback, ignoreExif = false) {
     let fileReader = new FileReader();
 
     fileReader.onload = () => {
@@ -940,7 +941,9 @@ export default class Dropzone extends Emitter {
         height,
         resizeMethod,
         fixOrientation,
-        callback
+        callback,
+        undefined,
+        ignoreExif
       );
     };
 
@@ -992,7 +995,8 @@ export default class Dropzone extends Emitter {
     resizeMethod,
     fixOrientation,
     callback,
-    crossOrigin
+    crossOrigin,
+    ignoreExif = false
   ) {
     // Not using `new Image` here because of a bug in latest Chrome versions.
     // See https://github.com/enyo/dropzone/pull/226
@@ -1105,7 +1109,12 @@ export default class Dropzone extends Emitter {
       img.onerror = callback;
     }
 
-    return (img.src = file.dataURL);
+    var dataURL = file.dataURL;
+    if (ignoreExif) {
+       dataURL = removeExif(dataURL);
+    }
+
+    return (img.src = dataURL);
   }
 
   // Goes through the queue and processes files if there aren't too many already.
@@ -2064,165 +2073,107 @@ var drawImageIOSFix = function (ctx, img, sx, sy, sw, sh, dx, dy, dw, dh) {
   return ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh / vertSquashRatio);
 };
 
-// Based on MinifyJpeg
+// Inspired by MinifyJpeg
 // Source: http://www.perry.cz/files/ExifRestorer.js
 // http://elicon.blog57.fc2.com/blog-entry-206.html
-class ExifRestore {
-  static initClass() {
-    this.KEY_STR =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-  }
+function removeExif(origFileBase64) {
 
-  static encode64(input) {
-    let output = "";
-    let chr1 = undefined;
-    let chr2 = undefined;
-    let chr3 = "";
-    let enc1 = undefined;
-    let enc2 = undefined;
-    let enc3 = undefined;
-    let enc4 = "";
-    let i = 0;
-    while (true) {
-      chr1 = input[i++];
-      chr2 = input[i++];
-      chr3 = input[i++];
-      enc1 = chr1 >> 2;
-      enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-      enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-      enc4 = chr3 & 63;
-      if (isNaN(chr2)) {
-        enc3 = enc4 = 64;
-      } else if (isNaN(chr3)) {
-        enc4 = 64;
-      }
-      output =
-        output +
-        this.KEY_STR.charAt(enc1) +
-        this.KEY_STR.charAt(enc2) +
-        this.KEY_STR.charAt(enc3) +
-        this.KEY_STR.charAt(enc4);
-      chr1 = chr2 = chr3 = "";
-      enc1 = enc2 = enc3 = enc4 = "";
-      if (!(i < input.length)) {
-        break;
-      }
-    }
-    return output;
-  }
+   var marker = 'data:image/jpeg;base64,';
 
-  static restore(origFileBase64, resizedFileBase64) {
-    if (!origFileBase64.match("data:image/jpeg;base64,")) {
-      return resizedFileBase64;
-    }
-    let rawImage = this.decode64(
-      origFileBase64.replace("data:image/jpeg;base64,", "")
-    );
-    let segments = this.slice2Segments(rawImage);
-    let image = this.exifManipulation(resizedFileBase64, segments);
-    return `data:image/jpeg;base64,${this.encode64(image)}`;
-  }
+   if (!origFileBase64.startsWith(marker)) {
+      return origFileBase64;
+   }
 
-  static exifManipulation(resizedFileBase64, segments) {
-    let exifArray = this.getExifArray(segments);
-    let newImageArray = this.insertExif(resizedFileBase64, exifArray);
-    let aBuffer = new Uint8Array(newImageArray);
-    return aBuffer;
-  }
+   var origFile = window.atob(origFileBase64.slice(marker.length));
 
-  static getExifArray(segments) {
-    let seg = undefined;
-    let x = 0;
-    while (x < segments.length) {
-      seg = segments[x];
-      if ((seg[0] === 255) & (seg[1] === 225)) {
-        return seg;
-      }
-      x++;
-    }
-    return [];
-  }
+   if (!origFile.startsWith("\xFF\xD8\xFF")) {
+      return origFileBase64;
+   }
 
-  static insertExif(resizedFileBase64, exifArray) {
-    let imageData = resizedFileBase64.replace("data:image/jpeg;base64,", "");
-    let buf = this.decode64(imageData);
-    let separatePoint = buf.indexOf(255, 3);
-    let mae = buf.slice(0, separatePoint);
-    let ato = buf.slice(separatePoint);
-    let array = mae;
-    array = array.concat(exifArray);
-    array = array.concat(ato);
-    return array;
-  }
+   // loop through the JPEG file segments and copy all but Exif segments into the filtered file.
+   var head = 0;
+   var filteredFile = "";
+   while (head < origFile.length) {
 
-  static slice2Segments(rawImageArray) {
-    let head = 0;
-    let segments = [];
-    while (true) {
-      var length;
-      if ((rawImageArray[head] === 255) & (rawImageArray[head + 1] === 218)) {
-        break;
-      }
-      if ((rawImageArray[head] === 255) & (rawImageArray[head + 1] === 216)) {
-        head += 2;
-      } else {
-        length = rawImageArray[head + 2] * 256 + rawImageArray[head + 3];
-        let endPoint = head + length + 2;
-        let seg = rawImageArray.slice(head, endPoint);
-        segments.push(seg);
-        head = endPoint;
-      }
-      if (head > rawImageArray.length) {
-        break;
-      }
-    }
-    return segments;
-  }
+     if (origFile.slice(head, head+2) == "\xFF\xDA") {
+       // this is the start of the image data, we don't expect exif data after that.
+       filteredFile += origFile.slice(head);
+       break;
+     } else if (origFile.slice(head, head+2) == "\xFF\xD8") {
+       // this is the global start marker.
+       filteredFile += origFile.slice(head, head+2);
+       head += 2;
+     } else {
+       // we have a segment of variable size.
+       var length = origFile.charCodeAt(head + 2) * 256 + origFile.charCodeAt(head + 3);
+       var endPoint = head + length + 2;
+       var segment = origFile.slice(head, endPoint);
+       if (!segment.startsWith("\xFF\xE1")) {
+         filteredFile += segment;
+       }
+       head = endPoint;
+     }
+   }
 
-  static decode64(input) {
-    let output = "";
-    let chr1 = undefined;
-    let chr2 = undefined;
-    let chr3 = "";
-    let enc1 = undefined;
-    let enc2 = undefined;
-    let enc3 = undefined;
-    let enc4 = "";
-    let i = 0;
-    let buf = [];
-    // remove all characters that are not A-Z, a-z, 0-9, +, /, or =
-    let base64test = /[^A-Za-z0-9\+\/\=]/g;
-    if (base64test.exec(input)) {
-      console.warn(
-        "There were invalid base64 characters in the input text.\nValid base64 characters are A-Z, a-z, 0-9, '+', '/',and '='\nExpect errors in decoding."
-      );
-    }
-    input = input.replace(/[^A-Za-z0-9\+\/\=]/g, "");
-    while (true) {
-      enc1 = this.KEY_STR.indexOf(input.charAt(i++));
-      enc2 = this.KEY_STR.indexOf(input.charAt(i++));
-      enc3 = this.KEY_STR.indexOf(input.charAt(i++));
-      enc4 = this.KEY_STR.indexOf(input.charAt(i++));
-      chr1 = (enc1 << 2) | (enc2 >> 4);
-      chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-      chr3 = ((enc3 & 3) << 6) | enc4;
-      buf.push(chr1);
-      if (enc3 !== 64) {
-        buf.push(chr2);
-      }
-      if (enc4 !== 64) {
-        buf.push(chr3);
-      }
-      chr1 = chr2 = chr3 = "";
-      enc1 = enc2 = enc3 = enc4 = "";
-      if (!(i < input.length)) {
-        break;
-      }
-    }
-    return buf;
-  }
+   return marker + window.btoa(filteredFile);
 }
-ExifRestore.initClass();
+
+
+function restoreExif(origFileBase64, resizedFileBase64) {
+
+   var marker = 'data:image/jpeg;base64,';
+
+   if (!(origFileBase64.startsWith(marker) && resizedFileBase64.startsWith(marker))) {
+      return resizedFileBase64;
+   }
+
+   var origFile = window.atob(origFileBase64.slice(marker.length));
+
+   if (!origFile.startsWith("\xFF\xD8\xFF")) {
+      return resizedFileBase64;
+   }
+
+   // Go through the JPEG file segments one by one and collect any Exif segments we find.
+   var head = 0;
+   var exifData = "";
+   while (head < origFile.length) {
+
+     if (origFile.slice(head, head+2) == "\xFF\xDA") {
+       // this is the start of the image data, we don't expect exif data after that.
+       break;
+     } else if (origFile.slice(head, head+2) == "\xFF\xD8") {
+       // this is the global start marker.
+       head += 2;
+     } else {
+       // we have a segment of variable size.
+       var length = origFile.charCodeAt(head + 2) * 256 + origFile.charCodeAt(head + 3);
+       var endPoint = head + length + 2;
+       var segment = origFile.slice(head, endPoint);
+       if (segment.startsWith("\xFF\xE1")) {
+         exifData += segment;
+       }
+       head = endPoint;
+     }
+
+   }
+
+   if (exifData == "") {
+      return resizedFileBase64;
+   }
+
+   var resizedFile = window.atob(resizedFileBase64.slice(marker.length));
+
+   if (!resizedFile.startsWith("\xFF\xD8\xFF")) {
+      return resizedFileBase64;
+   }
+
+   // The first file segment is always header information so insert the Exif data as second segment.
+   var splitPoint = 4 + resizedFile.charCodeAt(4) * 256 + resizedFile.charCodeAt(5)
+   resizedFile = resizedFile.slice(0, splitPoint) + exifData + resizedFile.slice(splitPoint);
+
+   return marker + window.btoa(resizedFile);
+}
+
 
 /*
  * contentloaded.js
