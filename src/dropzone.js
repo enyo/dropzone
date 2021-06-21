@@ -960,6 +960,11 @@ export default class Dropzone extends Emitter {
     crossOrigin,
     resizeThumbnail = true
   ) {
+    mockFile.accepted = true;
+    mockFile.status = Dropzone::Dropzone.SUCCESS;
+    this.files.push(mockFile)
+    this._updateMaxFilesReachedClass();
+
     this.emit("addedfile", mockFile);
     this.emit("complete", mockFile);
 
