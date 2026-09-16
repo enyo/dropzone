@@ -764,6 +764,24 @@ describe("Dropzone", function () {
           }, 10);
         })));
 
+    describe("init()", function () {
+      it("should set the enctype on a form element", function () {
+        let form = Dropzone.createElement("<form></form>");
+        let formDropzone = new Dropzone(form, { url: "url" });
+
+        expect(form.getAttribute("enctype")).toBe("multipart/form-data");
+        formDropzone.destroy();
+      });
+
+      it("should leave an existing enctype alone on a non-form element", function () {
+        let div = Dropzone.createElement("<div></div>");
+        let divDropzone = new Dropzone(div, { url: "url" });
+
+        expect(div.getAttribute("enctype")).toBe(null);
+        divDropzone.destroy();
+      });
+    });
+
     describe(".destroy()", function () {
       it("should properly cancel all pending uploads and remove all file references", () =>
         new Promise((done) => {
@@ -806,6 +824,18 @@ describe("Dropzone", function () {
         expect(Dropzone.instances.indexOf(dropzone) !== -1).toBeTruthy();
         dropzone.destroy();
         return expect(Dropzone.instances.indexOf(dropzone) === -1).toBeTruthy();
+      });
+
+      it("should leave other instances alone when destroyed twice", function () {
+        let other = new Dropzone(Dropzone.createElement("<div></div>"), { url: "url" });
+
+        dropzone.destroy();
+        // The second call finds nothing to remove. `splice(-1, 1)` used to
+        // take the last entry regardless, evicting an unrelated live instance.
+        dropzone.destroy();
+
+        expect(Dropzone.instances.indexOf(other) !== -1).toBeTruthy();
+        other.destroy();
       });
     });
 

@@ -334,8 +334,9 @@ export default class Dropzone extends Emitter {
   // The function that gets called when Dropzone is initialized. You
   // can (and should) setup event listeners inside this function.
   init() {
-    // In case it isn't set already
-    if (this.element.tagName === "form") {
+    // In case it isn't set already. `tagName` is upper case on HTML elements,
+    // so this never matched and the attribute was never set.
+    if (this.element.tagName === "FORM") {
       this.element.setAttribute("enctype", "multipart/form-data");
     }
 
@@ -547,7 +548,11 @@ export default class Dropzone extends Emitter {
       this.hiddenFileInput = null;
     }
     delete this.element.dropzone;
-    return Dropzone.instances.splice(Dropzone.instances.indexOf(this), 1);
+    // `indexOf` returns -1 for an instance that is no longer registered --
+    // destroying twice is enough -- and `splice(-1, 1)` would then quietly
+    // drop the last entry, which is a different, live Dropzone.
+    let index = Dropzone.instances.indexOf(this);
+    return index === -1 ? [] : Dropzone.instances.splice(index, 1);
   }
 
   updateTotalUploadProgress() {
