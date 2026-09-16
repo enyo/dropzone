@@ -764,6 +764,24 @@ describe("Dropzone", function () {
           }, 10);
         })));
 
+    describe("init()", function () {
+      it("should set the enctype on a form element", function () {
+        let form = Dropzone.createElement("<form></form>");
+        let formDropzone = new Dropzone(form, { url: "url" });
+
+        expect(form.getAttribute("enctype")).toBe("multipart/form-data");
+        formDropzone.destroy();
+      });
+
+      it("should leave an existing enctype alone on a non-form element", function () {
+        let div = Dropzone.createElement("<div></div>");
+        let divDropzone = new Dropzone(div, { url: "url" });
+
+        expect(div.getAttribute("enctype")).toBe(null);
+        divDropzone.destroy();
+      });
+    });
+
     describe(".destroy()", function () {
       it("should properly cancel all pending uploads and remove all file references", () =>
         new Promise((done) => {
