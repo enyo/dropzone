@@ -1,3 +1,11 @@
+## 6.3.4
+
+### Patch Changes
+
+- [#2377](https://github.com/enyo/dropzone/pull/2377) [`0b302ee`](https://github.com/enyo/dropzone/commit/0b302eee30dd709ea00f58ad43d33e3a48502cbb) - Stop `destroy()` removing a different instance. `Dropzone.instances.splice(indexOf(this), 1)` dropped the last entry whenever `indexOf` returned -1 — calling `destroy()` twice was enough — evicting an unrelated live Dropzone from the registry.
+
+- [#2377](https://github.com/enyo/dropzone/pull/2377) [`dc5d7bf`](https://github.com/enyo/dropzone/commit/dc5d7bfb1dd450baa467d4682d9fb3d12be30758) - Set `enctype="multipart/form-data"` on a form again. `init()` compared `tagName` against lower-case `"form"`, which never matches, so the attribute was never set. Only affects forms that are also submitted natively; the XHR upload is unchanged.
+
 ## 6.3.3
 
 ### Patch Changes
