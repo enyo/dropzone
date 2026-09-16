@@ -70,6 +70,63 @@ describe("Emitter", function () {
     return expect(callCount2).toBe(1);
   });
 
+  describe(".emit() while the listeners change", function () {
+    it("should still run every listener when one removes itself", function () {
+      let calls = [];
+
+      // A one-shot listener is the usual way to end up here: it unregisters
+      // itself from inside the very emit that is walking the array. Splicing
+      // it out shifted everything after it down past the loop's index, so the
+      // listener that followed was silently skipped. See #2367.
+      let first = function () {
+        calls.push("first");
+        emitter.off("test", first);
+      };
+      emitter.on("test", first);
+      emitter.on("test", () => calls.push("second"));
+      emitter.on("test", () => calls.push("third"));
+
+      emitter.emit("test");
+
+      expect(calls).toEqual(["first", "second", "third"]);
+
+      // And it really is gone for the next one.
+      calls = [];
+      emitter.emit("test");
+      expect(calls).toEqual(["second", "third"]);
+    });
+
+    it("should still run the listeners that were registered when off() removes them all", function () {
+      let calls = [];
+
+      emitter.on("test", function () {
+        calls.push("first");
+        emitter.off("test");
+      });
+      emitter.on("test", () => calls.push("second"));
+
+      emitter.emit("test");
+
+      expect(calls).toEqual(["first", "second"]);
+      expect(emitter._callbacks["test"]).toBe(undefined);
+    });
+
+    it("should not run a listener added by another listener until the next emit", function () {
+      let calls = [];
+
+      emitter.on("test", function () {
+        calls.push("first");
+        emitter.on("test", () => calls.push("added"));
+      });
+
+      emitter.emit("test");
+      expect(calls).toEqual(["first"]);
+
+      emitter.emit("test");
+      expect(calls).toEqual(["first", "first", "added"]);
+    });
+  });
+
   describe(".off()", function () {
     let callback1 = function () {};
     let callback2 = function () {};

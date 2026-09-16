@@ -25,7 +25,12 @@ export default class Emitter {
     let callbacks = this._callbacks[event!];
 
     if (callbacks) {
-      for (let callback of callbacks) {
+      // Iterating the live array would skip a listener whenever one of them
+      // removes itself: `off` splices in place, so everything after the
+      // removed entry shifts down past the loop's index. Snapshotting also
+      // means a listener added by another listener does not run until the
+      // next emit, which is how EventEmitter behaves. See #2367.
+      for (let callback of callbacks.slice()) {
         callback.apply(this, args);
       }
     }
