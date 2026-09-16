@@ -4,6 +4,10 @@ import extend from "./extend";
 import Emitter from "./emitter";
 import defaultOptions from "./options";
 import type { DropzoneOptions, ResolvedDropzoneOptions } from "./options";
+// The stylesheet as text rather than a side-effecting import, so nothing is
+// added to the document unless injectStyles asks for it.
+import fullStyles from "./dropzone.css?inline";
+import basicStyles from "./basic.css?inline";
 
 export type { DropzoneOptions, ResolvedDropzoneOptions };
 
@@ -78,6 +82,13 @@ export type DropzoneThumbnailCallback = (
   dataUrl: string | Event,
   canvas?: HTMLCanvasElement | null,
 ) => void;
+
+/**
+ * Which stylesheet `injectStyles` should add. The two are alternatives rather
+ * than layers -- `basic` is not a subset of `full` -- so picking one excludes
+ * the other. `true` means `"full"`.
+ */
+export type DropzoneStyles = boolean | "basic" | "full";
 
 /** One element and the handlers bound to it, as tracked for removal. */
 export type DropzoneListener = {
@@ -223,6 +234,12 @@ export default class Dropzone extends Emitter {
     );
 
     this.options.previewTemplate = this.options.previewTemplate.replace(/\n*/g, "");
+
+    // Before the fallback check: the fallback form is styled by the same
+    // stylesheet, so it needs this too.
+    if (this.options.injectStyles) {
+      Dropzone.injectStyles(this.options.injectStyles);
+    }
 
     // If the browser failed, just call the fallback and leave
     if (this.options.forceFallback || !Dropzone.isBrowserSupported()) {
@@ -2042,6 +2059,25 @@ export default class Dropzone extends Emitter {
 
     // write the ArrayBuffer to a blob
     return new Blob([ab], { type: mimeString });
+  }
+
+  // Adds the stylesheet to the document, at most once, however many dropzones
+  // ask for it. Prepended rather than appended so that a stylesheet the page
+  // already links wins on equal specificity -- injecting last would quietly
+  // override styling that used to work.
+  static injectStyles(which: DropzoneStyles = true): void {
+    if (typeof document === "undefined") return;
+    if (which === false) return;
+    if (document.querySelector("style[data-dropzone]")) return;
+
+    let variant = which === "basic" ? "basic" : "full";
+
+    let style = document.createElement("style");
+    // Names which one went in, so a second dropzone asking for the other can
+    // be seen to have been ignored rather than silently doubling up.
+    style.setAttribute("data-dropzone", variant);
+    style.textContent = variant === "basic" ? basicStyles : fullStyles;
+    document.head.insertBefore(style, document.head.firstChild);
   }
 
   // Creates an element from string
