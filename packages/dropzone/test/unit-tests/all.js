@@ -807,6 +807,18 @@ describe("Dropzone", function () {
         dropzone.destroy();
         return expect(Dropzone.instances.indexOf(dropzone) === -1).toBeTruthy();
       });
+
+      it("should leave other instances alone when destroyed twice", function () {
+        let other = new Dropzone(Dropzone.createElement("<div></div>"), { url: "url" });
+
+        dropzone.destroy();
+        // The second call finds nothing to remove. `splice(-1, 1)` used to
+        // take the last entry regardless, evicting an unrelated live instance.
+        dropzone.destroy();
+
+        expect(Dropzone.instances.indexOf(other) !== -1).toBeTruthy();
+        other.destroy();
+      });
     });
 
     describe(".filesize()", function () {

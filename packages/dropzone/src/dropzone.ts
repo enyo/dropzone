@@ -547,7 +547,11 @@ export default class Dropzone extends Emitter {
       this.hiddenFileInput = null;
     }
     delete this.element.dropzone;
-    return Dropzone.instances.splice(Dropzone.instances.indexOf(this), 1);
+    // `indexOf` returns -1 for an instance that is no longer registered --
+    // destroying twice is enough -- and `splice(-1, 1)` would then quietly
+    // drop the last entry, which is a different, live Dropzone.
+    let index = Dropzone.instances.indexOf(this);
+    return index === -1 ? [] : Dropzone.instances.splice(index, 1);
   }
 
   updateTotalUploadProgress() {
