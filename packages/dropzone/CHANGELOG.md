@@ -1,3 +1,27 @@
+## 6.3.2
+
+### Patch Changes
+
+- [#2371](https://github.com/enyo/dropzone/pull/2371) [`536d94a`](https://github.com/enyo/dropzone/commit/536d94afd9da8f55b4e4976bd527909946e75e4a) - Fix `cancelUpload` leaving parallel chunks uploading.
+
+  `file.xhr` only holds the request that started last, so cancelling a chunked upload running with `parallelChunkUploads` aborted that one request and left every other in-flight chunk streaming to the server — burning the user's bandwidth and writing orphaned chunks for a file the UI already showed as canceled.
+
+  Every chunk keeps its own request, so `cancelUpload` now aborts all of the ones still running. Uploads that are not chunked are unaffected.
+
+- [#2372](https://github.com/enyo/dropzone/pull/2372) [`a1a67df`](https://github.com/enyo/dropzone/commit/a1a67dfe16c100b2346974c6d3a7270fc661c423) - Fix `emit` skipping a listener when another one removes itself.
+
+  `emit` walked the live callback array, so a listener that called `off` for itself — the usual shape of a one-shot listener, and of teardown code — spliced the array out from under the loop and the listener registered right after it never ran. `emit` now iterates over a snapshot.
+
+  One consequence worth knowing about: a listener registered from inside another listener no longer runs during that same `emit`, it runs from the next one. That is what Node's `EventEmitter` does, and it is the only way to keep the removal case correct.
+
+- [#2370](https://github.com/enyo/dropzone/pull/2370) [`0e3625d`](https://github.com/enyo/dropzone/commit/0e3625d05d5861561447be3de64e5481e2186bb1) - Fix the thumbnail queue deadlocking when a file cannot be read.
+
+  `createThumbnail` only listened for `FileReader`'s `load` event. A file that had been moved, locked by another process, or was otherwise unreadable since it was dropped fires `error` instead, so the callback was never invoked and `_processThumbnailQueue` kept its lock forever: no file added afterwards got a thumbnail, and with `resizeWidth`/`resizeHeight` or a `transformFile` that uses `createThumbnail`, the upload never started either.
+
+  The read error now reaches the callback the same way an undecodable image already did, so the file gets `dictThumbnailError` and the queue moves on.
+
+  `DropzoneThumbnailCallback` says what it has always done, too: its first argument is `string | Event`, the error event standing in for the data URL when no thumbnail could be produced. That also fixes `displayExistingFile`, which used to emit that event as a thumbnail when the image URL failed to load, leaving the preview with `img.src` set to `"[object Event]"`.
+
 ## 6.3.1
 
 ### Patch Changes
