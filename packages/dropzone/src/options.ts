@@ -203,7 +203,7 @@ let defaultOptions = {
    * or an array of those. In that case, all of those elements will trigger an
    * upload when clicked.
    */
-  clickable: true,
+  clickable: true as boolean | string | HTMLElement | (string | HTMLElement)[],
 
   /**
    * Whether hidden files in directories should be ignored.
@@ -274,7 +274,7 @@ let defaultOptions = {
    *
    * Can be a selector string, or an element directly.
    */
-  hiddenInputContainer: "body",
+  hiddenInputContainer: "body" as string | HTMLElement,
 
   /**
    * If null, no capture type will be specified

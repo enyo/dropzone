@@ -52,7 +52,7 @@
     "build": "vite build && vite build --config vite.config.global.mjs && pnpm run css && pnpm run build:types",
     "css": "lightningcss --minify --sourcemap --browserslist src/dropzone.css -o dist/dropzone.css && lightningcss --minify --sourcemap --browserslist src/basic.css -o dist/basic.css",
     "build:types": "tsc",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
