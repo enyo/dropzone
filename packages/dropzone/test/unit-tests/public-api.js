@@ -66,6 +66,20 @@ describe("public API", function () {
       expect(dropzone.createThumbnailFromUrl).toHaveBeenCalledTimes(1);
     });
 
+    it("should not emit a thumbnail when the image url fails to load", async function () {
+      create();
+      let thumbnail = null;
+      dropzone.on("thumbnail", (file, url) => (thumbnail = url));
+
+      // A URL that never resolves to an image: the preview would otherwise be
+      // handed the error event and set `img.src` to "[object Event]".
+      await new Promise((done) =>
+        dropzone.displayExistingFile(mockFile(), "/does-not-exist.png", done),
+      );
+
+      expect(thumbnail).toBe(null);
+    });
+
     // #2003 and the 7.0 roadmap: files added this way never reach this.files,
     // so maxFiles cannot see them. The documented workaround is to push them
     // by hand, which is why fixing it is a breaking change rather than a

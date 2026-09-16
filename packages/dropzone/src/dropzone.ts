@@ -68,9 +68,14 @@ export type DropzoneTransformCallback = (file: DropzoneFile | Blob) => void;
 /**
  * Invoked with the rendered thumbnail as a data URL, and the canvas it was
  * drawn on -- which is null when the image needed no resizing.
+ *
+ * There is no separate error callback: when the thumbnail cannot be produced,
+ * because the file cannot be read or the image cannot be decoded, this is
+ * invoked with the error event in place of the data URL. Check with
+ * `typeof dataUrl === "string"` before using it.
  */
 export type DropzoneThumbnailCallback = (
-  dataUrl: string,
+  dataUrl: string | Event,
   canvas?: HTMLCanvasElement | null,
 ) => void;
 
@@ -979,11 +984,11 @@ export default class Dropzone extends Emitter {
       this.options.thumbnailHeight,
       this.options.thumbnailMethod,
       true,
-      (dataUrl: string) => {
-        // `createThumbnailFromUrl` hands its callback the error event when the
-        // image cannot be decoded, so anything that is not a data URL means
-        // the thumbnail failed. Emitting it as one would set the preview's
-        // `img.src` to "[object Event]" and render a broken image. See #2218.
+      (dataUrl: string | Event) => {
+        // Both failure paths -- the file not being readable, and the image
+        // not being decodable -- hand the callback the error event. Emitting
+        // that as a thumbnail would set the preview's `img.src` to
+        // "[object Event]" and render a broken image. See #2218 and #2365.
         if (typeof dataUrl === "string") {
           this.emit("thumbnail", file, dataUrl);
         } else {
@@ -1039,9 +1044,10 @@ export default class Dropzone extends Emitter {
       height,
       resizeMethod,
       true,
-      (dataUrl: string, canvas?: HTMLCanvasElement | null) => {
+      (dataUrl: string | Event, canvas?: HTMLCanvasElement | null) => {
         if (canvas == null) {
-          // The image has not been resized
+          // The image has not been resized, or could not be read or decoded at
+          // all -- either way there is nothing to send but the original file.
           return callback(file);
         } else {
           let { resizeMimeType } = this.options;
@@ -1094,6 +1100,18 @@ export default class Dropzone extends Emitter {
       this.createThumbnailFromUrl(file, width, height, resizeMethod, fixOrientation, callback);
     };
 
+    // A file that cannot be read -- moved, locked by another process, or on a
+    // drive that went away since it was dropped -- fires `error` and never
+    // `load`. Without this the callback is never invoked at all, which leaves
+    // `_processThumbnailQueue` holding its lock forever: no later file gets a
+    // thumbnail, and an upload waiting on `transformFile` never sends. See
+    // #2365.
+    fileReader.onerror = (e) => {
+      if (callback != null) {
+        callback(e);
+      }
+    };
+
     fileReader.readAsDataURL(file);
   }
 
@@ -1117,8 +1135,14 @@ export default class Dropzone extends Emitter {
       this.emit("thumbnail", mockFile, imageUrl);
       if (callback) callback();
     } else {
-      let onDone = (thumbnail: string) => {
-        this.emit("thumbnail", mockFile, thumbnail);
+      let onDone = (thumbnail: string | Event) => {
+        // An image URL that does not load -- gone from the server, or blocked
+        // by CORS -- arrives here as the error event. Emitting that as a
+        // thumbnail would set the preview's `img.src` to "[object Event]", so
+        // leave the preview alone and just report that we are done.
+        if (typeof thumbnail === "string") {
+          this.emit("thumbnail", mockFile, thumbnail);
+        }
         if (callback) callback();
       };
       mockFile.dataURL = imageUrl;
@@ -1247,9 +1271,8 @@ export default class Dropzone extends Emitter {
 
     if (callback != null) {
       // The same callback does double duty: it receives the thumbnail on
-      // success, and is called as the image's error handler on failure, where
-      // an Event arrives instead of a data URL.
-      img.onerror = callback as unknown as OnErrorEventHandler;
+      // success, and the error event on failure.
+      img.onerror = (e) => callback(e);
     }
 
     return (img.src = file.dataURL!);

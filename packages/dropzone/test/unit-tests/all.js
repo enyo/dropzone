@@ -1363,6 +1363,52 @@ describe("Dropzone", function () {
             dropzone.addFile(corrupt);
           }));
 
+        it("should emit an error and keep the queue moving if a file can't be read", async function () {
+          dropzone.processFile = function () {};
+          dropzone.uploadFile = function () {};
+
+          // A file that has gone away since it was dropped, or is locked by
+          // another process, makes FileReader fire `error` and never `load`.
+          // See #2365.
+          let readAsDataURL = vi
+            .spyOn(FileReader.prototype, "readAsDataURL")
+            .mockImplementation(function () {
+              setTimeout(() => this.dispatchEvent(new ProgressEvent("error")), 0);
+            });
+
+          let unreadable = getMockFile("image/png", "unreadable.png");
+
+          let message = await new Promise(function (resolve) {
+            dropzone.on("error", function (file, message) {
+              if (file === unreadable) resolve(message);
+            });
+            dropzone.addFile(unreadable);
+          });
+
+          expect(message).toBe(dropzone.options.dictThumbnailError);
+          // The lock has to be released, or nothing queued behind the failed
+          // file is ever processed again.
+          expect(dropzone._processingThumbnail).toBe(false);
+
+          readAsDataURL.mockRestore();
+
+          let readable = await new Promise(function (resolve) {
+            let canvas = document.createElement("canvas");
+            canvas.width = canvas.height = 10;
+            canvas.toBlob(
+              (blob) => resolve(new File([blob], "readable.png", { type: "image/png" })),
+              "image/png",
+            );
+          });
+
+          let thumbnailed = await new Promise(function (resolve) {
+            dropzone.on("thumbnail", (file) => resolve(file));
+            dropzone.addFile(readable);
+          });
+
+          expect(thumbnailed).toBe(readable);
+        });
+
         it("should not let the thumbnail itself be dragged", function () {
           dropzone.processFile = function () {};
           dropzone.uploadFile = function () {};
