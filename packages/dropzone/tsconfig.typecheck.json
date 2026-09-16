@@ -1,0 +1,13 @@
+{
+  // Type checking only, so it can reach files the build must not emit:
+  // test/types holds assertions about the public types, which would otherwise
+  // land in dist/ as declarations of their own.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "rootDir": "."
+  },
+  "include": ["src/**/*.ts", "src/types.d.ts", "test/types/**/*.ts"]
+}
