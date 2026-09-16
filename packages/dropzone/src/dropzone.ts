@@ -1344,7 +1344,18 @@ export default class Dropzone extends Emitter {
       for (let groupedFile of groupedFiles) {
         groupedFile.status = Dropzone.CANCELED;
       }
-      if (typeof file.xhr !== "undefined") {
+      if (file.upload.chunked && file.upload.chunks) {
+        // `file.xhr` only ever holds the request that started last, so with
+        // `parallelChunkUploads` aborting it leaves every other chunk
+        // streaming to the server for a file the user has already canceled.
+        // Each chunk keeps its own request, so abort them all. See #2366.
+        for (let chunk of file.upload.chunks) {
+          if (chunk && chunk.xhr && chunk.status === Dropzone.UPLOADING) {
+            chunk.status = Dropzone.CANCELED;
+            chunk.xhr.abort();
+          }
+        }
+      } else if (typeof file.xhr !== "undefined") {
         file.xhr.abort();
       }
       for (let groupedFile of groupedFiles) {

@@ -2208,6 +2208,36 @@ describe("Dropzone", function () {
               }, 10);
             }));
 
+          it("should abort every chunk still in flight when the upload is canceled", () =>
+            new Promise((done) => {
+              dropzone.options.chunking = true;
+              dropzone.options.chunkSize = 1;
+              dropzone.options.parallelChunkUploads = 3;
+
+              let file = getMockFile("text/html", "chunked-file", ["abcdef"]);
+              dropzone.addFile(file);
+
+              setTimeout(function () {
+                // Three of the six chunks are in flight, each with its own
+                // request.
+                expect(requests.length).toBe(3);
+                expect(requests.map((request) => request.aborted)).toEqual([false, false, false]);
+
+                dropzone.cancelUpload(file);
+
+                expect(file.status).toBe(Dropzone.CANCELED);
+                // `file.xhr` only holds the request that started last, so the
+                // other two used to keep streaming to the server. See #2366.
+                expect(requests.map((request) => request.aborted)).toEqual([true, true, true]);
+                expect(file.upload.chunks.map((chunk) => chunk.status)).toEqual([
+                  Dropzone.CANCELED,
+                  Dropzone.CANCELED,
+                  Dropzone.CANCELED,
+                ]);
+                done();
+              }, 10);
+            }));
+
           it("should never start fewer than one chunk", () =>
             new Promise((done) => {
               startChunked({ parallelChunkUploads: 0 });
