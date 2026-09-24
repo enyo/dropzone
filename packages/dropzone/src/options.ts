@@ -1,5 +1,10 @@
 import Dropzone from "./dropzone";
-import type { DropzoneAcceptCallback, DropzoneFile, DropzoneTransformCallback } from "./dropzone";
+import type {
+  DropzoneAcceptCallback,
+  DropzoneFile,
+  DropzoneStyles,
+  DropzoneTransformCallback,
+} from "./dropzone";
 import defaultPreviewTemplate from "./preview-template.html?raw";
 
 let defaultOptions = {
@@ -246,6 +251,44 @@ let defaultOptions = {
    * You'll have to call `enqueueFile(file)` manually.
    */
   autoQueue: true,
+
+  /**
+   * Adds Dropzone's stylesheet to the document itself, so there is no `<link>`
+   * to remember and no path to keep in step with the package.
+   *
+   * - `false` — add nothing. The default.
+   * - `true` or `"full"` — `dist/dropzone.css`, the ready-to-go styling.
+   * - `"basic"` — `dist/basic.css`, layout only, for styling it yourself.
+   *
+   * The two stylesheets are alternatives rather than layers: `basic` is not a
+   * subset of `full`, so picking one excludes the other.
+   *
+   * It is inserted once into `<head>` however many dropzones are on the page,
+   * and inserted *first*, so your own rules win on equal specificity without
+   * needing `!important`. If two dropzones ask for different ones, the first
+   * to be constructed wins.
+   *
+   * Defaults to false so that nothing changes for anyone on an upgrade.
+   *
+   * It is not the cheaper setting, though. The stylesheets travel inside the
+   * JavaScript whether or not this is switched on -- a runtime flag cannot be
+   * tree-shaken -- so importing the CSS through a bundler as well ships it
+   * twice. Turning this on is about 1.2 kB gzipped smaller than importing it.
+   *
+   * One thing a `<link>` does that this cannot: block the first paint. These
+   * styles arrive when the script does, so if the script is slow the browser
+   * can paint before them. Everything Dropzone creates is made after the
+   * styles go in and is never seen unstyled, and an empty dropzone element
+   * has nothing to show either way -- but your own markup inside it will be
+   * visible unstyled until then, and will shift when the styling lands. Link
+   * the stylesheet if that matters.
+   *
+   * ```js
+   * new Dropzone("#my-form", { url: "/upload", injectStyles: true });
+   * new Dropzone("#other", { url: "/upload", injectStyles: "basic" });
+   * ```
+   */
+  injectStyles: false as DropzoneStyles,
 
   /**
    * If `true`, this will add a link to every file preview to remove or cancel (if
