@@ -1611,7 +1611,7 @@ export default class Dropzone extends Emitter {
       if (this.options.uploadMultiple) {
         this.emit("sendingmultiple", files, xhr);
       }
-      this.submitRequest(xhr, null as any, files);
+      this.submitRequest(xhr, null, files, dataBlocks);
     } else {
       let formData = new FormData();
 
@@ -1659,7 +1659,7 @@ export default class Dropzone extends Emitter {
         formData.append(dataBlock.name, dataBlock.data, dataBlock.filename);
       }
 
-      this.submitRequest(xhr, formData, files);
+      this.submitRequest(xhr, formData, files, dataBlocks);
     }
   }
 
@@ -1839,7 +1839,12 @@ export default class Dropzone extends Emitter {
     );
   }
 
-  submitRequest(xhr: XMLHttpRequest, formData: FormData, files: DropzoneFile[]) {
+  submitRequest(
+    xhr: XMLHttpRequest,
+    formData: FormData | null,
+    files: DropzoneFile[],
+    dataBlocks?: any[],
+  ) {
     if (xhr.readyState != 1) {
       console.warn("Cannot send this request because the XMLHttpRequest.readyState is not OPENED.");
       return;
@@ -1849,7 +1854,12 @@ export default class Dropzone extends Emitter {
         const chunk = this._getChunk(files[0], xhr)!;
         xhr.send(chunk.dataBlock.data);
       } else {
-        xhr.send(files[0]);
+        // `files[0]` is the file as it was dropped, not what should go on the
+        // wire: `transformFile` may have replaced it, which is how
+        // `resizeWidth` and `resizeHeight` work. The result is in
+        // `dataBlocks`, the same as for the chunked and form-data paths. The
+        // fallback is for anyone calling this themselves without them.
+        xhr.send(dataBlocks ? dataBlocks[0].data : files[0]);
       }
     } else {
       xhr.send(formData);
