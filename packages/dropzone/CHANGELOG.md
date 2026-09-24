@@ -1,3 +1,9 @@
+## 6.3.5
+
+### Patch Changes
+
+- [#2379](https://github.com/enyo/dropzone/pull/2379) [`eae9121`](https://github.com/enyo/dropzone/commit/eae9121da858f4af9002df125286f83e098eb9e5) - Fix cancelling an upload while `transformFile` is still running. The file had no `xhr` yet, so it was grouped with every other file that had not started and the whole queue was cancelled with it — and the file itself was still sent once the transform finished.
+
 ## 6.3.4
 
 ### Patch Changes
