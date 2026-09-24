@@ -692,6 +692,65 @@ describe("Dropzone", function () {
           }, 10);
         }));
 
+      it("should not cancel other queued files if the upload has not started yet", () =>
+        new Promise((done) => {
+          dropzone.accept = (file, done) => done();
+          // A transform that never finishes: the file is UPLOADING but has no
+          // xhr, which is what used to group it with every queued file.
+          dropzone.options.transformFile = () => {};
+          dropzone.options.parallelUploads = 1;
+
+          let uploading = getMockFile("text/html", "uploading");
+          let queued1 = getMockFile("text/html", "queued1");
+          let queued2 = getMockFile("text/html", "queued2");
+
+          dropzone.addFile(uploading);
+          dropzone.addFile(queued1);
+          dropzone.addFile(queued2);
+
+          return setTimeout(function () {
+            expect(uploading.status).toBe(Dropzone.UPLOADING);
+            expect(uploading.xhr).toBe(undefined);
+
+            let canceled = [];
+            dropzone.on("canceled", (file) => canceled.push(file.upload.filename));
+
+            dropzone.cancelUpload(uploading);
+
+            expect(uploading.status).toBe(Dropzone.CANCELED);
+            // Only the file the user cancelled. The queue then moves on, so
+            // the next one starts and the last one waits its turn.
+            expect(canceled).toEqual(["uploading"]);
+            expect([queued1.status, queued2.status]).toEqual([Dropzone.UPLOADING, Dropzone.QUEUED]);
+            return done();
+          }, 10);
+        }));
+
+      it("should not send a file that was canceled while it was being transformed", () =>
+        new Promise((done) => {
+          dropzone.accept = (file, done) => done();
+
+          let finishTransform = null;
+          dropzone.options.transformFile = (file, transformDone) =>
+            (finishTransform = () => transformDone(file));
+
+          let mockFile = getMockFile();
+          dropzone.addFile(mockFile);
+
+          return setTimeout(function () {
+            expect(mockFile.status).toBe(Dropzone.UPLOADING);
+
+            dropzone.cancelUpload(mockFile);
+            expect(mockFile.status).toBe(Dropzone.CANCELED);
+
+            // The transform only finishes now, after the user gave up on it.
+            finishTransform();
+
+            expect(mockFile.xhr).toBe(undefined);
+            return done();
+          }, 10);
+        }));
+
       it("should properly cancel all files with the same XHR if uploadMultiple is true", () =>
         new Promise((done) => {
           let mock1 = getMockFile();

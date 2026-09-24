@@ -1345,7 +1345,12 @@ export default class Dropzone extends Emitter {
   // set to CANCELED.
   cancelUpload(file: DropzoneFile) {
     if (file.status === Dropzone.UPLOADING) {
-      let groupedFiles = this._getFilesWithXhr(file.xhr!);
+      // A file cancelled while `transformFile` is still running is already
+      // UPLOADING but has no request yet. Grouping by an undefined `xhr` then
+      // matched every other file that had not started either -- the whole
+      // queue -- and cancelled all of them. Without a request there is nobody
+      // to share it with, so the group is just this file. See #2231.
+      let groupedFiles = file.xhr ? this._getFilesWithXhr(file.xhr) : [file];
       for (let groupedFile of groupedFiles) {
         groupedFile.status = Dropzone.CANCELED;
       }
@@ -1395,6 +1400,14 @@ export default class Dropzone extends Emitter {
 
   uploadFiles(files: DropzoneFile[]) {
     this._transformFiles(files, (transformedFiles: (DropzoneFile | Blob)[]) => {
+      // `transformFile` is asynchronous and can take a while -- resizing or
+      // compressing a large image, or asking a server to presign the upload --
+      // and the user can cancel or remove the file in the meantime. Sending it
+      // now would upload data the UI already reported as canceled. See #2231.
+      if (files.every((file) => file.status === Dropzone.CANCELED)) {
+        return;
+      }
+
       // Options are often read straight out of markup or a config file, so
       // `chunkSize` can arrive as a string. `start + "2097152"` would then
       // concatenate instead of adding, and every chunk after the first would
