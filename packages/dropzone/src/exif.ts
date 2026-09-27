@@ -238,6 +238,10 @@ export function orientationTransform(
 // JPEG keeps its EXIF. Returned unchanged if there is none, or if either one
 // is not a JPEG.
 //
+// `resized` is expected to be upright, which is how `resizeImage` draws it, so
+// the orientation is set to 1 on the way. Copied as it was, it would make
+// anything that honours it turn the image a second time.
+//
 // It never throws. This runs inside `transformFile`, and an exception there
 // would leave the upload waiting for a `done` that never comes; losing the
 // metadata is the better outcome.
@@ -261,7 +265,13 @@ function insertExif(original: string, resized: string): string {
   if (exif == null) {
     return resized;
   }
-  let block = source.bytes.subarray(exif.start, exif.end);
+  let block = source.bytes.slice(exif.start, exif.end);
+  let orientation = orientationOf(source.bytes, exif);
+  if (orientation != null) {
+    let at = orientation.at - exif.start;
+    block[at] = orientation.little ? 1 : 0;
+    block[at + 1] = orientation.little ? 0 : 1;
+  }
 
   let target = decode(resizedBase64);
   if (target[0] !== 0xff || target[1] !== SOI) {

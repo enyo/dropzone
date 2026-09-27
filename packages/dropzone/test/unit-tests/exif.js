@@ -166,10 +166,13 @@ describe("EXIF orientation", function () {
       );
     });
 
-    it("should carry the original EXIF over to the resized image", async function () {
+    it("should carry the EXIF over, saying the image is upright now", async function () {
       let resized = await resize(fileOf(fixture), 32, null, "contain");
 
-      expect(exifOf(resized)).toEqual({ orientation: fixture.orientation, make: "Dropzone" });
+      expect(exifOf(resized)).toEqual({ orientation: 1, make: "Dropzone" });
+      // So a viewer that honours EXIF shows it the same way as one that does
+      // not, instead of turning it a second time. See #1967, #2081 and #2194.
+      expect(await looks(resized)).toBe("32x16 RGBY");
     });
   });
 
@@ -230,6 +233,15 @@ describe("restoreExif()", function () {
   it("should put it straight after the start of image when there is no JFIF header", function () {
     expect(restoreExif(jpeg(JFIF, EXIF, TABLE), jpeg(TABLE))).toBe(jpeg(EXIF, TABLE));
   });
+
+  it.each([false, true])(
+    "should set the orientation to 1, since the resized image is upright (little endian: %s)",
+    function (little) {
+      let restored = restoreExif(jpeg(JFIF, exifSegment(6, { little }), TABLE), jpeg(JFIF, TABLE));
+
+      expect(restored).toBe(jpeg(JFIF, exifSegment(1, { little }), TABLE));
+    },
+  );
 
   it("should take the first APP1 segment, whatever it holds", function () {
     expect(restoreExif(jpeg(JFIF, XMP, EXIF), jpeg(JFIF, TABLE))).toBe(jpeg(JFIF, XMP, TABLE));
