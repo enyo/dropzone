@@ -61,6 +61,29 @@ describe("Amazon S3 Support", function () {
       dropzone.destroy();
       return xhr.restore();
     });
+    it("should send the file itself when there is nothing to transform", async () => {
+      let file = getMockFile("text/plain", "plain.txt", ["original contents"]);
+      dropzone.addFile(file);
+      await sleep(10);
+
+      expect(requests[0].body).toBe(file);
+    });
+
+    // The point of binaryBody is uploading straight to a bucket, which is
+    // exactly where resizeWidth/resizeHeight are wanted -- and transformFile
+    // is how those work. The transformed blob was being dropped and the
+    // original file uploaded in its place.
+    it("should send what transformFile produced, not the original file", async () => {
+      let transformed = new Blob(["transformed contents"], { type: "text/plain" });
+      dropzone.options.transformFile = (file, done) => done(transformed);
+
+      dropzone.addFile(getMockFile("text/plain", "plain.txt", ["original contents"]));
+      await sleep(10);
+
+      expect(requests[0].body).toBe(transformed);
+      expect(await new Response(requests[0].body).text()).toBe("transformed contents");
+    });
+
     it("should add proper Content-Type", async () => {
       dropzone.addFile(getMockFile());
       dropzone.addFile(getMockFile("image/jpeg", "some-file.jpg", [[1, 2, 3]]));
