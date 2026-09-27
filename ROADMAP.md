@@ -106,21 +106,9 @@ changelog note telling people to delete their manual push.
 
 ### Restructure `src/dropzone.js`
 
-2,192 lines in one file holding the class, the browser detection, the EXIF
-restorer and the canvas helpers. Split along those seams.
-
-### Fix EXIF orientation on resize
-
-**#2001** by @kaymes strips EXIF before resizing so the browser stops
-auto-correcting, then restores it after, and replaces `ExifRestorer` with faster
-`atob`/`btoa` versions. It fixes rotated phone photos, which is a common and
-visible complaint.
-
-It is also the highest-risk PR in the backlog: +109/−158, conflicting with main,
-and the author says plainly they could not test it because they never got the
-build working. It needs a rebase and real fixtures at all eight EXIF
-orientations before it can be trusted. Give it its own release rather than
-burying it in a batch.
+2,192 lines in one file holding the class, the browser detection and the canvas
+helpers. Split along those seams. The EXIF handling has already moved out, to
+`src/exif.ts`.
 
 ---
 
