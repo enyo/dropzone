@@ -2,6 +2,7 @@
 import { version } from "../package.json";
 import extend from "./extend";
 import Emitter from "./emitter";
+import { restoreExif } from "./exif";
 import defaultOptions from "./options";
 import type { DropzoneOptions, ResolvedDropzoneOptions } from "./options";
 
@@ -1073,7 +1074,7 @@ export default class Dropzone extends Emitter {
           let resizedDataURL = canvas.toDataURL(resizeMimeType, this.options.resizeQuality);
           if (resizeMimeType === "image/jpeg" || resizeMimeType === "image/jpg") {
             // Now add the original EXIF information
-            resizedDataURL = ExifRestore.restore(file.dataURL!, resizedDataURL);
+            resizedDataURL = restoreExif(file.dataURL!, resizedDataURL);
           }
           return callback(Dropzone.dataURItoBlob(resizedDataURL));
         }
@@ -2282,164 +2283,6 @@ var drawImageIOSFix = function (
   let vertSquashRatio = detectVerticalSquash(img);
   return ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh / vertSquashRatio);
 };
-
-// Based on MinifyJpeg
-// Source: http://www.perry.cz/files/ExifRestorer.js
-// http://elicon.blog57.fc2.com/blog-entry-206.html
-class ExifRestore {
-  static KEY_STR: string;
-
-  static initClass() {
-    this.KEY_STR = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-  }
-
-  static encode64(input: any) {
-    let output = "";
-    let chr1: any = undefined;
-    let chr2: any = undefined;
-    let chr3: any = "";
-    let enc1: any = undefined;
-    let enc2: any = undefined;
-    let enc3: any = undefined;
-    let enc4: any = "";
-    let i = 0;
-    while (true) {
-      chr1 = input[i++];
-      chr2 = input[i++];
-      chr3 = input[i++];
-      enc1 = chr1 >> 2;
-      enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
-      enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
-      enc4 = chr3 & 63;
-      if (isNaN(chr2)) {
-        enc3 = enc4 = 64;
-      } else if (isNaN(chr3)) {
-        enc4 = 64;
-      }
-      output =
-        output +
-        this.KEY_STR.charAt(enc1) +
-        this.KEY_STR.charAt(enc2) +
-        this.KEY_STR.charAt(enc3) +
-        this.KEY_STR.charAt(enc4);
-      chr1 = chr2 = chr3 = "";
-      enc1 = enc2 = enc3 = enc4 = "";
-      if (!(i < input.length)) {
-        break;
-      }
-    }
-    return output;
-  }
-
-  static restore(origFileBase64: string, resizedFileBase64: string) {
-    if (!origFileBase64.match("data:image/jpeg;base64,")) {
-      return resizedFileBase64;
-    }
-    let rawImage = this.decode64(origFileBase64.replace("data:image/jpeg;base64,", ""));
-    let segments = this.slice2Segments(rawImage);
-    let image = this.exifManipulation(resizedFileBase64, segments);
-    return `data:image/jpeg;base64,${this.encode64(image)}`;
-  }
-
-  static exifManipulation(resizedFileBase64: string, segments: any[]) {
-    let exifArray = this.getExifArray(segments);
-    let newImageArray = this.insertExif(resizedFileBase64, exifArray);
-    let aBuffer = new Uint8Array(newImageArray);
-    return aBuffer;
-  }
-
-  static getExifArray(segments: any[]) {
-    let seg = undefined;
-    let x = 0;
-    while (x < segments.length) {
-      seg = segments[x];
-      if (seg[0] === 255 && seg[1] === 225) {
-        return seg;
-      }
-      x++;
-    }
-    return [];
-  }
-
-  static insertExif(resizedFileBase64: string, exifArray: any[]) {
-    let imageData = resizedFileBase64.replace("data:image/jpeg;base64,", "");
-    let buf = this.decode64(imageData);
-    let separatePoint = buf.indexOf(255, 3);
-    let mae = buf.slice(0, separatePoint);
-    let ato = buf.slice(separatePoint);
-    let array = mae;
-    array = array.concat(exifArray);
-    array = array.concat(ato);
-    return array;
-  }
-
-  static slice2Segments(rawImageArray: any[]) {
-    let head = 0;
-    let segments = [];
-    while (true) {
-      var length;
-      if (rawImageArray[head] === 255 && rawImageArray[head + 1] === 218) {
-        break;
-      }
-      if (rawImageArray[head] === 255 && rawImageArray[head + 1] === 216) {
-        head += 2;
-      } else {
-        length = rawImageArray[head + 2] * 256 + rawImageArray[head + 3];
-        let endPoint = head + length + 2;
-        let seg = rawImageArray.slice(head, endPoint);
-        segments.push(seg);
-        head = endPoint;
-      }
-      if (head > rawImageArray.length) {
-        break;
-      }
-    }
-    return segments;
-  }
-
-  static decode64(input: any) {
-    let chr1: any = undefined;
-    let chr2: any = undefined;
-    let chr3: any = "";
-    let enc1: any = undefined;
-    let enc2: any = undefined;
-    let enc3: any = undefined;
-    let enc4: any = "";
-    let i = 0;
-    let buf: number[] = [];
-    // remove all characters that are not A-Z, a-z, 0-9, +, /, or =
-    let base64test = /[^A-Za-z0-9+/=]/g;
-    if (base64test.exec(input)) {
-      console.warn(
-        "There were invalid base64 characters in the input text.\nValid base64 characters are A-Z, a-z, 0-9, '+', '/',and '='\nExpect errors in decoding.",
-      );
-    }
-    input = input.replace(/[^A-Za-z0-9+/=]/g, "");
-    while (true) {
-      enc1 = this.KEY_STR.indexOf(input.charAt(i++));
-      enc2 = this.KEY_STR.indexOf(input.charAt(i++));
-      enc3 = this.KEY_STR.indexOf(input.charAt(i++));
-      enc4 = this.KEY_STR.indexOf(input.charAt(i++));
-      chr1 = (enc1 << 2) | (enc2 >> 4);
-      chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
-      chr3 = ((enc3 & 3) << 6) | enc4;
-      buf.push(chr1);
-      if (enc3 !== 64) {
-        buf.push(chr2);
-      }
-      if (enc4 !== 64) {
-        buf.push(chr3);
-      }
-      chr1 = chr2 = chr3 = "";
-      enc1 = enc2 = enc3 = enc4 = "";
-      if (!(i < input.length)) {
-        break;
-      }
-    }
-    return buf;
-  }
-}
-ExifRestore.initClass();
 
 function __guard__(value: any, transform: any) {
   return typeof value !== "undefined" && value !== null ? transform(value) : undefined;

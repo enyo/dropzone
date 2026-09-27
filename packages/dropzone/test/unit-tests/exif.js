@@ -1,4 +1,5 @@
 import { Dropzone } from "../../src/dropzone";
+import { restoreExif } from "../../src/exif";
 
 // Every fixture displays as the same 64x32 image, one colour per quadrant --
 // red, green / blue, yellow -- but stores its pixels transformed by the inverse
@@ -202,5 +203,63 @@ describe("EXIF orientation", function () {
 
     expect(await looks(await thumbnail(png, 32, 32, "contain"))).toBe("32x16 RGBY");
     expect(await looks(await resize(png, 32, null, "contain"))).toBe("32x16 RGBY");
+  });
+});
+
+// Just enough of a JPEG for the segment handling: markers and lengths are
+// real, the contents are not.
+let segment = (marker, payload) => {
+  let length = payload.length + 2;
+  return [0xff, marker, length >> 8, length & 0xff, ...payload];
+};
+let text = (string) => Array.from(string, (char) => char.charCodeAt(0));
+let jpeg = (...segments) =>
+  jpegUrlOf(Uint8Array.from([0xff, 0xd8, ...segments.flat(), 0xff, 0xda, 0, 2, 0x12, 0xff, 0xd9]));
+
+const JFIF = segment(0xe0, text("JFIF\0\x01\x01\0\0\x01\0\x01\0\0"));
+const EXIF = segment(0xe1, text("Exif\0\0MM\0*\0\0\0\x08\0\0"));
+const XMP = segment(0xe1, text("http://ns.adobe.com/xap/1.0/\0<x/>"));
+// A quantisation table full of 0xFF, which is not a marker in there.
+const TABLE = segment(0xdb, [0, ...Array(64).fill(0xff)]);
+
+describe("restoreExif()", function () {
+  it("should put the EXIF segment after the JFIF header", function () {
+    expect(restoreExif(jpeg(JFIF, EXIF, TABLE), jpeg(JFIF, TABLE))).toBe(jpeg(JFIF, EXIF, TABLE));
+  });
+
+  it("should put it straight after the start of image when there is no JFIF header", function () {
+    expect(restoreExif(jpeg(JFIF, EXIF, TABLE), jpeg(TABLE))).toBe(jpeg(EXIF, TABLE));
+  });
+
+  it("should take the first APP1 segment, whatever it holds", function () {
+    expect(restoreExif(jpeg(JFIF, XMP, EXIF), jpeg(JFIF, TABLE))).toBe(jpeg(JFIF, XMP, TABLE));
+  });
+
+  it("should find EXIF past the part of the file it decodes first", function () {
+    // Four segments of the largest size there is push it past 192 KiB.
+    let large = segment(0xe2, Array(65533).fill(0));
+    let original = jpeg(JFIF, large, large, large, large, EXIF, TABLE);
+
+    expect(restoreExif(original, jpeg(JFIF, TABLE))).toBe(jpeg(JFIF, EXIF, TABLE));
+  });
+
+  it("should hand the resized image back as it is when the original has no EXIF", function () {
+    let resized = jpeg(JFIF, TABLE);
+
+    expect(restoreExif(jpeg(JFIF, TABLE), resized)).toBe(resized);
+  });
+
+  it("should hand the resized image back as it is if the original cannot be decoded", function () {
+    let resized = jpeg(JFIF, TABLE);
+
+    expect(restoreExif("data:image/jpeg;base64,not*base64", resized)).toBe(resized);
+  });
+
+  it("should hand the resized image back as it is unless both are JPEGs", function () {
+    let png = "data:image/png;base64,iVBORw0KGgo=";
+    let resized = jpeg(JFIF, TABLE);
+
+    expect(restoreExif(png, resized)).toBe(resized);
+    expect(restoreExif(jpeg(JFIF, EXIF, TABLE), png)).toBe(png);
   });
 });
