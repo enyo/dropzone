@@ -124,6 +124,10 @@ let defaultOptions = {
    * If only one, `resizeWidth` **or** `resizeHeight` is provided, the original aspect
    * ratio of the file will be preserved.
    *
+   * Resized JPEGs keep the original's EXIF, including date, camera and location;
+   * other formats keep none. The EXIF orientation is applied before resizing, so
+   * the result is upright.
+   *
    * The `options.transformFile` function uses these options, so if the `transformFile` function
    * is overridden, these options don't do anything.
    */
