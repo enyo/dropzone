@@ -1,5 +1,5 @@
 import { Dropzone } from "../../src/dropzone";
-import { restoreExif } from "../../src/exif";
+import { extractOrientation, restoreExif } from "../../src/exif";
 
 // Every fixture displays as the same 64x32 image, one colour per quadrant --
 // red, green / blue, yellow -- but stores its pixels transformed by the inverse
@@ -261,5 +261,147 @@ describe("restoreExif()", function () {
 
     expect(restoreExif(png, resized)).toBe(resized);
     expect(restoreExif(jpeg(JFIF, EXIF, TABLE), png)).toBe(png);
+  });
+});
+
+// An EXIF segment holding nothing but an orientation, written without going
+// through Dropzone. `null` leaves the tag out; `type` other than 3 (SHORT)
+// makes it malformed.
+function exifSegment(orientation, { little = false, type = 3, entries = null } = {}) {
+  let u16 = (v) => (little ? [v & 0xff, v >> 8] : [v >> 8, v & 0xff]);
+  let u32 = (v) =>
+    little ? [...u16(v & 0xffff), ...u16(v >>> 16)] : [...u16(v >>> 16), ...u16(v & 0xffff)];
+  let tags =
+    orientation == null
+      ? []
+      : [[...u16(0x0112), ...u16(type), ...u32(1), ...u16(orientation), 0, 0]];
+  let ifd = [...u16(entries ?? tags.length), ...tags.flat(), ...u32(0)];
+  return segment(0xe1, [
+    ...text("Exif\0\0"),
+    ...text(little ? "II" : "MM"),
+    ...u16(42),
+    ...u32(8),
+    ...ifd,
+  ]);
+}
+
+// Which bytes differ between two data URLs of the same length.
+function changedBytes(before, after) {
+  let [a, b] = [bytesOf(before), bytesOf(after)];
+  expect(b.length).toBe(a.length);
+  return a.reduce((changed, byte, i) => (byte === b[i] ? changed : [...changed, i]), []);
+}
+
+describe("extractOrientation()", function () {
+  let fixture = (name) => fixtures.find((f) => f.name === name).url;
+
+  it.each(["2-be", "3-le", "5-be", "6-be", "6-le", "7-le", "8-be"])(
+    "should report %s's orientation and set it to 1, changing nothing else",
+    function (name) {
+      let { url, orientation } = extractOrientation(fixture(name));
+
+      expect(orientation).toBe(Number(name[0]));
+      expect(exifOf(url)).toEqual({ orientation: 1, make: "Dropzone" });
+      // Only the low byte of the value, whichever end of the SHORT that is.
+      expect(changedBytes(fixture(name), url)).toHaveLength(1);
+    },
+  );
+
+  it("should hand back the very same string when there is nothing to turn", function () {
+    let upright = fixture("1-be");
+
+    expect(extractOrientation(upright)).toEqual({ url: upright, orientation: 1 });
+  });
+
+  it("should leave a JPEG without an orientation alone", function () {
+    for (let url of [
+      jpeg(JFIF, TABLE),
+      jpeg(JFIF, exifSegment(null), TABLE),
+      jpeg(JFIF, XMP, TABLE),
+    ]) {
+      expect(extractOrientation(url)).toEqual({ url, orientation: 1 });
+    }
+  });
+
+  it("should only look at the first EXIF segment, as browsers do", function () {
+    let url = jpeg(exifSegment(null), exifSegment(6), TABLE);
+
+    expect(extractOrientation(url)).toEqual({ url, orientation: 1 });
+  });
+
+  it("should ignore values that mean nothing, as browsers do", function () {
+    for (let url of [
+      jpeg(exifSegment(0), TABLE),
+      jpeg(exifSegment(9), TABLE),
+      jpeg(exifSegment(6, { type: 4 }), TABLE),
+    ]) {
+      expect(extractOrientation(url)).toEqual({ url, orientation: 1 });
+    }
+  });
+
+  it("should leave anything that is not a base64 JPEG alone", function () {
+    for (let url of [
+      "data:image/png;base64,iVBORw0KGgo=",
+      "data:image/jpeg,not-base64",
+      "https://example.com/photo.jpg",
+    ]) {
+      expect(extractOrientation(url)).toEqual({ url, orientation: 1 });
+    }
+  });
+
+  it("should give up quietly on a broken file", function () {
+    let brokenOrder = exifSegment(6);
+    brokenOrder.splice(10, 2, 0x58, 0x58); // "XX" instead of "MM"
+
+    for (let url of [
+      // Claims five entries, holds none: reading them would run off the end
+      // of the segment and into the table after it.
+      jpeg(exifSegment(null, { entries: 5 }), TABLE),
+      jpeg(brokenOrder, TABLE),
+      // A segment longer than the file.
+      jpegUrlOf(Uint8Array.from([0xff, 0xd8, 0xff, 0xe1, 0x10, 0x00, 0x45])),
+      "data:image/jpeg;base64,not*base64",
+    ]) {
+      expect(extractOrientation(url)).toEqual({ url, orientation: 1 });
+    }
+  });
+
+  it("should find the orientation past the part of the file it decodes first", function () {
+    // Four segments of the largest size there is push it past 192 KiB.
+    let large = segment(0xe2, Array(65533).fill(0));
+    let original = jpeg(JFIF, large, large, large, large, exifSegment(6), TABLE);
+
+    let { url, orientation } = extractOrientation(original);
+
+    expect(orientation).toBe(6);
+    expect(changedBytes(original, url)).toHaveLength(1);
+  });
+
+  it("should re-encode only the head of a large file and leave the rest as it was", function () {
+    // Large enough that only its head gets decoded; the base64 of the rest
+    // must be carried over as it is and still line up.
+    let scan = Uint8Array.from({ length: 400000 }, (_, i) => (i * 7) % 255);
+    let head = [
+      0xff,
+      0xd8,
+      ...JFIF,
+      ...exifSegment(6, { little: true }),
+      ...TABLE,
+      0xff,
+      0xda,
+      0,
+      2,
+    ];
+    let bytes = new Uint8Array(head.length + scan.length + 2);
+    bytes.set(head);
+    bytes.set(scan, head.length);
+    bytes.set([0xff, 0xd9], head.length + scan.length);
+    let original = jpegUrlOf(bytes);
+
+    let { url, orientation } = extractOrientation(original);
+
+    expect(orientation).toBe(6);
+    expect(changedBytes(original, url)).toHaveLength(1);
+    expect(url.slice(-1000)).toBe(original.slice(-1000));
   });
 });

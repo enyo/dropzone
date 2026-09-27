@@ -4,8 +4,6 @@ declare module "*.html?raw" {
   export default content;
 }
 
-// Optional globals. Neither is a dependency: Dropzone uses EXIF only when the
-// page already loaded exif.js, and registers a jQuery plugin only when jQuery
-// is present.
-declare const EXIF: any;
+// An optional global, not a dependency: Dropzone registers a jQuery plugin
+// only when jQuery is present.
 declare const jQuery: any;

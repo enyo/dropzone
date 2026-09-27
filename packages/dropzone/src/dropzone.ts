@@ -2,7 +2,7 @@
 import { version } from "../package.json";
 import extend from "./extend";
 import Emitter from "./emitter";
-import { restoreExif } from "./exif";
+import { extractOrientation, orientationTransform, restoreExif, storedRect } from "./exif";
 import defaultOptions from "./options";
 import type { DropzoneOptions, ResolvedDropzoneOptions } from "./options";
 
@@ -1184,95 +1184,69 @@ export default class Dropzone extends Emitter {
       img.crossOrigin = crossOrigin;
     }
 
-    // fixOrientation is not needed anymore with browsers handling imageOrientation
-    fixOrientation =
-      getComputedStyle(document.body)["imageOrientation"] == "from-image" ? false : fixOrientation;
+    // With `fixOrientation`, Dropzone turns the image upright itself: the
+    // browser gets a copy whose EXIF says it is upright already, and the real
+    // orientation is applied while drawing. That way the result is the same in
+    // every browser, whether or not it would have done this on its own.
+    // Without it -- for images from the server, which need not be data URLs --
+    // it is left to the browser.
+    let { url, orientation } = fixOrientation
+      ? extractOrientation(file.dataURL!)
+      : { url: file.dataURL!, orientation: 1 };
 
     img.onload = () => {
-      let loadExif = (callback: (orientation: number) => void) => callback(1);
-      if (typeof EXIF !== "undefined" && EXIF !== null && fixOrientation) {
-        loadExif = (callback: (orientation: number) => void) =>
-          EXIF.getData(img, function (this: any) {
-            return callback(EXIF.getTag(this as any, "Orientation"));
-          });
-      }
+      // Orientations 5 to 8 put the image on its side, so what is stored as
+      // its width is displayed as its height. From here on everything is in
+      // displayed axes, which is what `resize` and anyone reading `file.width`
+      // work with.
+      let sideways = orientation > 4;
+      file.width = sideways ? img.height : img.width;
+      file.height = sideways ? img.width : img.height;
 
-      return loadExif((orientation: number) => {
-        file.width = img.width;
-        file.height = img.height;
+      let resizeInfo = this.options.resize.call(this, file, width, height, resizeMethod);
 
-        let resizeInfo = this.options.resize.call(this, file, width, height, resizeMethod);
+      let canvas = document.createElement("canvas");
+      let ctx = canvas.getContext("2d")!;
 
-        let canvas = document.createElement("canvas");
-        let ctx = canvas.getContext("2d")!;
+      canvas.width = resizeInfo.trgWidth;
+      canvas.height = resizeInfo.trgHeight;
 
-        canvas.width = resizeInfo.trgWidth;
-        canvas.height = resizeInfo.trgHeight;
-
-        if (orientation > 4) {
-          canvas.width = resizeInfo.trgHeight;
-          canvas.height = resizeInfo.trgWidth;
-        }
-
-        switch (orientation) {
-          case 2:
-            // horizontal flip
-            ctx.translate(canvas.width, 0);
-            ctx.scale(-1, 1);
-            break;
-          case 3:
-            // 180° rotate left
-            ctx.translate(canvas.width, canvas.height);
-            ctx.rotate(Math.PI);
-            break;
-          case 4:
-            // vertical flip
-            ctx.translate(0, canvas.height);
-            ctx.scale(1, -1);
-            break;
-          case 5:
-            // vertical flip + 90 rotate right
-            ctx.rotate(0.5 * Math.PI);
-            ctx.scale(1, -1);
-            break;
-          case 6:
-            // 90° rotate right
-            ctx.rotate(0.5 * Math.PI);
-            ctx.translate(0, -canvas.width);
-            break;
-          case 7:
-            // horizontal flip + 90 rotate right
-            ctx.rotate(0.5 * Math.PI);
-            ctx.translate(canvas.height, -canvas.width);
-            ctx.scale(-1, 1);
-            break;
-          case 8:
-            // 90° rotate left
-            ctx.rotate(-0.5 * Math.PI);
-            ctx.translate(-canvas.height, 0);
-            break;
-        }
-
-        // This is a bugfix for iOS' scaling bug.
-        drawImageIOSFix(
-          ctx,
-          img,
-          resizeInfo.srcX != null ? resizeInfo.srcX : 0,
-          resizeInfo.srcY != null ? resizeInfo.srcY : 0,
-          resizeInfo.srcWidth,
-          resizeInfo.srcHeight,
-          resizeInfo.trgX != null ? resizeInfo.trgX : 0,
-          resizeInfo.trgY != null ? resizeInfo.trgY : 0,
-          resizeInfo.trgWidth,
-          resizeInfo.trgHeight,
-        );
-
-        let thumbnail = canvas.toDataURL("image/png");
-
-        if (callback != null) {
-          return callback(thumbnail, canvas);
-        }
+      // `resize` picks what to show from the displayed image; take it from
+      // where those pixels are actually stored, and turn them upright on the
+      // way into the target rectangle.
+      let source = storedRect(orientation, file.width, file.height, {
+        x: resizeInfo.srcX != null ? resizeInfo.srcX : 0,
+        y: resizeInfo.srcY != null ? resizeInfo.srcY : 0,
+        width: resizeInfo.srcWidth,
+        height: resizeInfo.srcHeight,
       });
+      ctx.translate(
+        resizeInfo.trgX != null ? resizeInfo.trgX : 0,
+        resizeInfo.trgY != null ? resizeInfo.trgY : 0,
+      );
+      ctx.transform(
+        ...orientationTransform(orientation, resizeInfo.trgWidth, resizeInfo.trgHeight),
+      );
+
+      // This is a bugfix for iOS' scaling bug.
+      drawImageIOSFix(
+        ctx,
+        img,
+        source.x,
+        source.y,
+        source.width,
+        source.height,
+        0,
+        0,
+        sideways ? resizeInfo.trgHeight : resizeInfo.trgWidth,
+        sideways ? resizeInfo.trgWidth : resizeInfo.trgHeight,
+      );
+
+      let thumbnail = canvas.toDataURL("image/png");
+
+      if (callback != null) {
+        return callback(thumbnail, canvas);
+      }
     };
 
     if (callback != null) {
@@ -1281,7 +1255,7 @@ export default class Dropzone extends Emitter {
       img.onerror = (e) => callback(e);
     }
 
-    return (img.src = file.dataURL!);
+    return (img.src = url);
   }
 
   // Goes through the queue and processes files if there aren't too many already.
