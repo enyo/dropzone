@@ -98,6 +98,45 @@ Importing this CSS file greatly depends on the bundler or framework that you are
 
 You can also simply include the CSS file in your html. Refer to the [Stand-alone file](stand-alone.md) section for this.
 
+### Letting Dropzone add the CSS for itself
+
+If you would rather not wire the stylesheet up at all, set `injectStyles` and Dropzone inserts it for you:
+
+```javascript
+new Dropzone("#my-form", { url: "/file/post", injectStyles: true });
+```
+
+It takes which stylesheet you want:
+
+| value | what it adds |
+| --- | --- |
+| `false` | nothing. The default |
+| `true` or `"full"` | `dropzone.css`, the ready-to-go styling |
+| `"basic"` | `basic.css`, layout only, for styling it yourself |
+
+The two are **alternatives, not layers** — `basic.css` is not a subset of `dropzone.css`, and each carries rules the other does not, so picking one excludes the other.
+
+It is added once per page however many dropzones you create, and inserted **first** in `<head>`, so your own stylesheet still wins on equal specificity without needing `!important`. If two dropzones ask for different stylesheets, the first one constructed wins.
+
+:::caution
+
+A `<link>` blocks the first paint; this cannot. The styles arrive when the script does, so on a slow connection the browser may paint before them.
+
+Everything Dropzone builds — the message, the previews — is created *after* the styles go in, so it is never seen unstyled, and an empty `<div class="dropzone">` has nothing to show either way. But markup **you** put inside the dropzone element is visible unstyled until the script runs, and shifts when the styling lands. Link the stylesheet if that matters to you.
+
+:::
+
+It is off by default so that upgrading changes nothing for anyone. That is the only reason — it is **not** the cheaper setting.
+
+The stylesheets travel inside the JavaScript whether or not you switch the option on, because a runtime flag cannot be tree-shaken. So importing the CSS through your bundler as well ships it **twice**: once as a string inside the script, once as a stylesheet. Measured on a minimal app:
+
+| | ships | gzipped |
+| --- | --- | --- |
+| `import "dropzone/dist/dropzone.css"` | script + stylesheet | 15,518&nbsp;B |
+| `injectStyles: true` | script only | **14,279&nbsp;B** |
+
+If you are bundling, turning it on is the smaller choice. The reason to link the stylesheet instead is the timing above, not the size.
+
 :::info
 
 You can check out the [examples repository](https://github.com/dropzone/dropzone-examples) for ways to handle this with different bundlers.
