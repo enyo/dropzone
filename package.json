@@ -29,12 +29,12 @@
     "changeset:publish": "changeset publish"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^1.0.0",
-    "@changesets/cli": "^3.0.1",
-    "@playwright/test": "^1.62.1",
-    "oxfmt": "^0.67.0",
-    "oxlint": "^1.82.0",
-    "playwright": "^1.62.1"
+    "@changesets/changelog-github": "^1.0.1",
+    "@changesets/cli": "^3.0.3",
+    "@playwright/test": "^1.63.0",
+    "oxfmt": "^0.70.0",
+    "oxlint": "^1.85.0",
+    "playwright": "^1.63.0"
   },
   "engines": {
     "node": ">=20.19.0"
